@@ -1,7 +1,10 @@
-
 import pandas as pd 
 import os
+##########################
 
+#    preprocesamiento    #
+
+###########################
 #################
 
 #    Etapa 1    #
@@ -100,16 +103,214 @@ class first_stage:
         d = self.filter_by_variable(d)
         return d
 
+#####################
+
+#    creacion de    #
+#    datasets       #
+
+#####################
 ################
 #              #
 #   Etapa 2    #
 #              #
 ################
+import numpy as np 
+class second_stage:
+    def __init__(self, src_dataframe:str) -> None:
+        self.src=src_dataframe
+    def create_random_sample(self,out_dataframe:str,n:int=1740):
+        df=pd.read_csv(self.src)
+        df_sample=df.sample(n,random_state=42)
+        df_sample.to_csv(out_dataframe,index=False)
+    def  create_random_sample_prop(self,out_dataframe:str,n:int=1740):
+        df=pd.read_csv(self.src)
+        total=len(df)
+        samples_per_station=(
+            df["station"].value_counts(normalize=True)*n
+        ).round().astype(int)
+        df_prop=pd.concat([
+            df[df["station"]==station].sample(
+                n=min(n,len(df[df["station"]==station])),random_state=42
+            )
+            for station,n in samples_per_station.items()
+        ])
+        df_prop.to_csv(out_dataframe,index=False)
+    def create_systematic_random(self,out_dataframe:str,n:int=1740):
+        df=pd.read_csv(self.src)
+        df=df.sort_values(["station","anio","MES","DIA","HORA"])
+        total=len(df)
+        proportions=df["station"].value_counts(normalize=True)
+        samples_per_station=(proportions*n).round().astype(int)
+        diff=n-samples_per_station.sum()
+        if diff!=0:
+            idx_max=samples_per_station.idxmax()
+            samples_per_station[idx_max]+=diff
+        result=[]
+        for station, n_station in samples_per_station.items():
+            group=df[df["station"]==station]
+            if len(group)==0 or n_station==0:
+                continue 
+            step=len(group)/n_station
+            indices=(np.arange(n_station)*step).astype(int)
+            sampled=group.iloc[indices]
+            result.append(sampled)
+        df_final=pd.concat(result).reset_index(drop=True)
+        df_final.to_csv(out_dataframe,index=False)
+        return df_final
+    def create_politic_sample(self, out_dataframe:str,n:int=1740):
+        df=pd.read_csv(self.src)
+        df_antes = df[(df["anio"] >= 2017) & (df["anio"] <= 2020)]
+        df_despues = df[(df["anio"] >= 2021) & (df["anio"] <= 2023)]
+        df_antes["key"] = df_antes["MES"].astype(str) + "_" + df_antes["DIA"].astype(str) + "_" + df_antes["HORA"].astype(str) + "_" + df_antes["station"]
+        df_despues["key"] = df_despues["MES"].astype(str) + "_" + df_despues["DIA"].astype(str) + "_" + df_despues["HORA"].astype(str) + "_" + df_despues["station"]
+        df_merge = pd.merge(df_antes, df_despues, on=["key","station"], suffixes=("_antes", "_despues"))
+        df_pairs=df_merge[["station","pm25_antes","pm25_despues"]]
+        df_pairs=df_pairs.sample(n=n,random_state=42)
+        df_pairs["reduccion_porcentual"]=(
+            (df_pairs["pm25_antes"]-df_pairs["pm25_despues"])/df_pairs["pm25_antes"]
+        )*100
+        df_pairs.to_csv(out_dataframe,index=False)
 
+########################
+
+#     Etapa 1          #
+# Carga y exploracion  #
+# Incial               #
+
+########################
+import matplotlib.pyplot as plt 
+import scipy.stats as stats 
+class analysis_1:
+    def __init__(self,root_source:str) -> None:
+        self.src=root_source
+        self.load_files()
+    def load_files(self):
+        self.dataframes={
+            os.path.splitext(file)[0]:pd.read_csv(os.path.join(self.src,file)) 
+            for file in sorted(os.listdir(self.src))}
+    def calculate_statistics_all(self)->pd.DataFrame:
+        stats_dict= {
+            file:{
+                "mean":dataframe["pm25"].mean(),
+                "median":dataframe["pm25"].median(),
+                "std":dataframe["pm25"].std(),
+                "IQR":dataframe["pm25"].quantile(q=0.75)-dataframe["pm25"].quantile(q=0.25)
+            }
+            for file,dataframe in self.dataframes.items()
+            if "politica" in file
+        }
+        df_stats=pd.DataFrame(stats_dict).T
+        return df_stats
+    def calculate_statistics(self,dataframe:str)->pd.DataFrame:
+        stats_dict={
+                "mean":self.dataframes[dataframe]["pm25"].mean(),
+                "median":self.dataframes[dataframe]["pm25"].median(),
+                "std":self.dataframes[dataframe]["pm25"].std(),
+                "IQR":self.dataframes[dataframe]["pm25"].quantile(q=0.75)-self.dataframes[dataframe]["pm25"].quantile(q=0.25)
+        }
+        df_stats=pd.DataFrame([stats_dict],index=[dataframe])
+        return df_stats 
+    def visualize_distributions(self,file:str,column:str="pm25",title="Descripcion",out:str="plots"):
+        data=self.dataframes[file][column].dropna()
+        fix,axes=plt.subplots(1,3,figsize=(18,5))
+        axes[0].hist(data,bins=30)
+        axes[0].set_title(f"{title} - Histograma")
+        
+        #boxplot 
+        axes[1].boxplot(data,vert=True)
+        axes[1].set_title(f"{title} - BoxPlot")
+
+        stats.probplot(data,dist="norm",plot=axes[2])
+        axes[2].set_title(f"{title} - Q-Q Plot")
+        create_folder(out)
+        file_name=f"{file}_{column}.png"
+        full_path=os.path.join(out,file_name)
+        plt.savefig(full_path,dpi=300)
+        plt.tight_layout()
+        plt.show()
+        print(f"Gráfica guardada en: {full_path}")
+    def normality_shapiro(self,file:str,column:str="pm25",alpha:float=0.05)->tuple[float,float]:
+        data=self.dataframes[file][column].dropna()
+        data_sampled=data.sample(5000,random_state=42)
+        stat,p =stats.shapiro(data_sampled)
+        print(f"Estadistico : {stat}")
+        print(f"Estadistico : {p:.5f}")
+        if p>alpha :
+            print("No se rechaza H0: por lo tanto es distribucion normal")
+        else:
+            print("Se rechaza H0, por lo tanto no es normal")
+        return stat,p 
+#################
+
+#   Etapa 2     #
+#   Prueba t    #
+#   para una    #
+#   muestra     #
+
+#################
+class analysis_2:
+    def __init__(self,dataframe_complete:dict[str,pd.DataFrame]):
+        self.data=dataframe_complete
+    def one_sample_t_test(self,file:str,column:str="pm25",mu:float=45.2):
+        data=self.data[file][column].dropna()
+        mean=data.mean()
+        t_stat,p_value=stats.ttest_1samp(data,popmean=mu)
+        confidence=0.95
+        n=len(data)
+        se=stats.sem(data)
+        h=se*stats.t.ppf((1+confidence)/2,n-1)
+        ci_lower=mean-h
+        ci_upper=mean+h
+        reject=p_value<0.05 
+        conclusion = "Se rechaza H0" if reject else "No se rechaza H0"
+        return {
+            "mean":mean,
+            "t_stat":t_stat,
+            "p_value":p_value,
+            "ci_lower":ci_lower,
+            "ci_uppper":ci_upper,
+            "reject_H0":reject,
+            "conclusion":conclusion 
+        }
+    def complete_table(self,list_files:list[str],column:str="pm25",mu:float=45.2):
+        results=[self.one_sample_t_test(file,column,mu) for file in list_files]
+        return pd.DataFrame(results,index=list_files)
+        
+def preprocesamiento(src_poblacion_completa,src_A,src_B,src_C,src_politica):
+    """
+    Primera etapa 
+    """
+    etapa = first_stage("data/Salamanca", src_poblacion_completa, "pm25")
+    create_folder("processed/")
+    df_fijo = etapa.run_pipeline(tipo="horarios")
+    df_fijo=df_fijo.dropna()
+    etapa.save_cache(df_fijo)
+
+    """
+        Segunda etapa 
+    """
+    etapa_2=second_stage(src_poblacion_completa)
+    etapa_2.create_random_sample(src_A)
+    etapa_2.create_random_sample_prop(src_B)
+    etapa_2.create_systematic_random(src_C)
+    etapa_2.create_politic_sample(src_politica)
 
 def main():
-    etapa = first_stage("data/Salamanca", "data/processed/poblacion_completa.csv", "pm25")
-    create_folder("data/processed/dataframe")
-    df_fijo = etapa.run_pipeline(tipo="horarios")
-    etapa.save_cache(df_fijo)
+    src_poblacion_completa="processed/poblacion_completa.csv"
+    src_A="processed/A.csv"
+    src_B="processed/B.csv"
+    src_C="processed/C.csv"
+    src_politica="processed/politica.csv"
+#    preprocesamiento(src_poblacion_completa,src_A,src_B,src_C,src_politica)
+    #Primer punto 
+    a1=analysis_1("processed")
+    df_statistics_complete_population=a1.calculate_statistics("poblacion_completa")
+    print(df_statistics_complete_population)
+    a1.visualize_distributions("poblacion_completa",title="Poblacion Completa")
+    stats,p=a1.normality_shapiro("poblacion_completa")
+    #segundo punto 
+    a2=analysis_2(a1.dataframes)
+    df_ttest_sample=a2.complete_table(list_files=["A","B","C"],mu=df_statistics_complete_population["mean"])
+    print(df_ttest_sample)
+    
 main()
