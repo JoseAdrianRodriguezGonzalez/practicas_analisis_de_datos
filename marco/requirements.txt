@@ -1,0 +1,13 @@
+pandas
+folium
+geopandas
+matplotlib
+shapely
+statsmodels
+scikit-learn
+networkx
+rdflib
+openpyxl
+requests
+pmdarima
+numpy

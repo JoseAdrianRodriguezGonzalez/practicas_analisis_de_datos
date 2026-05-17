@@ -1,0 +1,97 @@
+
+\documentclass[12pt,a4paper]{report}
+
+% ==== PAQUETES BÁSICOS ====
+
+\usepackage{subcaption}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath,amssymb}
+\usepackage[T1]{fontenc}
+\usepackage[spanish]{babel}
+\usepackage{graphicx} % para imágenes
+\usepackage{caption}
+\usepackage{hyperref} % hipervínculos
+\usepackage{geometry} % márgenes
+\usepackage{booktabs}
+\usepackage{subcaption}
+\geometry{left=3cm,right=2.5cm,top=3cm,bottom=2.5cm}
+
+% ==== CÓDIGO FUENTE ====
+\usepackage[linesnumbered,ruled,vlined]{algorithm2e}
+\SetKwInOut{KwIn}{Entrada}
+\SetKwInOut{KwOut}{Salida}
+
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{tikz}
+%%%%%Uso de bonificador de javascript
+\usepackage{listings}
+\usepackage{xcolor}
+\lstdefinestyle{javascript}{
+  language=Java,
+  morekeywords={async,await,import,export,from},
+  keywordstyle=\color{blue}\bfseries,
+  stringstyle=\color{red},
+  commentstyle=\color{gray},
+  basicstyle=\ttfamily\small,
+  breaklines=true,
+  showstringspaces=false
+}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+\usetikzlibrary{shapes.geometric, arrows,positioning}
+\tikzstyle{startstop} = [rectangle, rounded corners, minimum width=2cm, minimum height=0.7cm,text centered, draw=black, fill=red!30]
+\tikzstyle{process} = [rectangle, minimum width=2cm, minimum height=0.7cm, text centered, draw=black, fill=blue!20]
+\tikzstyle{decision} = [diamond, minimum width=3cm, minimum height=0.7cm, text centered, draw=black, fill=green!30]
+\tikzstyle{arrow} = [thick,->,>=stealth]
+\lstset{
+    language=C,                 % Puedes cambiarlo: Python, Java, etc.
+    basicstyle=\ttfamily\small,   % Fuente monoespaciada
+    keywordstyle=\color{blue},    % Palabras clave
+    stringstyle=\color{red},      % Strings
+    commentstyle=\color{gray},    % Comentarios
+    backgroundcolor=\color{black!5},
+    numbers=left,                 % Números de línea
+    numberstyle=\tiny\color{gray},
+    stepnumber=1,
+    breaklines=true,
+    tabsize=4
+}
+\begin{document}
+% ==== PORTADA ====
+\begin{titlepage}
+    \centering
+    
+    % Imagen institucional (ejemplo: logo)
+    \includegraphics[width=0.3\textwidth]{ug.png}\par\vspace{1cm}
+    
+    % Nombre de la universidad
+    {\Large \textbf{Universidad de Guanajuato}}\\[0.5cm]
+    
+    % Nombre de la materia
+    {\large \textbf{Materia: Aprendizaje de máquina}}\\[1cm]
+    {\large \textbf{Carrera: Licenciatura en Ingeniería de Datos e Inteligencia Artificial}}\\[3cm]
+    
+    % Título de la tarea
+    {\Huge \textbf{Tarea 2: Uso de aprendizaje no supervisado para identificación de tareas}}\\[2cm]
+    
+    % Datos del alumno
+    {\large \textbf{Alumno:} José Adrián Rodríguez González}\\[0.3cm]
+    {\large \textbf{NUA:} 148661}\\[1.5cm]
+    
+    % Datos del profesor
+    {\large \textbf{Profesor:} Dr. Dora Almanza Luz Ojeda}\\[3cm]
+    
+    % Fecha
+    {\large \today}
+    
+\vfill
+\end{titlepage}
+
+\tableofcontents % Índice automático
+\newpage
+
+% ==== INTRODUCCIÓN ====
+\chapter{Introducción y objetivos}
+\end{document}

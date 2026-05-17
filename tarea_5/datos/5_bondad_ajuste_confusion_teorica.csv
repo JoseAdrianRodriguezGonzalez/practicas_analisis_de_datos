@@ -1,0 +1,5 @@
+category,observed,expected_prop,expected_count
+FP,93,0.08,80.0
+FN,63,0.07,70.0
+TP,591,0.62,620.0
+TN,253,0.23,230.0
