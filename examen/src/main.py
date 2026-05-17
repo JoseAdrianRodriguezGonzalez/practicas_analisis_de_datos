@@ -275,7 +275,53 @@ class analysis_2:
     def complete_table(self,list_files:list[str],column:str="pm25",mu:float=45.2):
         results=[self.one_sample_t_test(file,column,mu) for file in list_files]
         return pd.DataFrame(results,index=list_files)
+  ######################
+
+#   Etapa 3            #
+#   Prueba t           #
+#   para muestras      #
+#   independientes     #
+
+########################
+class analysis_3:
+    def __init__(self,dataframe_complete:dict[str,pd.DataFrame]) :
+        self.data=dataframe_complete
+    def independent_t_test(self,file1:str,file2:str,column:str="pm25"):
+        data1=self.data[file1][column]
+        data2=self.data[file2][column]
+        stat_leven,p_levene=stats.levene(data1,data2)
+        equal_var=p_levene>=0.05
+        t_stat,pvalue=stats.ttest_ind(data1,data2,equal_var=equal_var)
+        type_test="t-test" if equal_var else "Welch"
+        return {
+            "mean_1":float(data1.mean()),
+            "mean_2":float(data2.mean()),
+            "levene_p":float(p_levene),
+            "type_test":type_test,
+            "t_stat":float(t_stat),
+            "p_value":float(pvalue),
+            "reject_H0":bool(pvalue<0.05)
+        }
+    def create_table(self):
+        pairs=[("A","B"),("A","C"),("B","C")]
+        results=[]
+        for f1, f2 in pairs:
+            res = self.independent_t_test(f1, f2)
         
+            results.append({
+                "comparison": f"{f1} vs {f2}",
+                "mean_1": res["mean_1"],
+                "mean_2": res["mean_2"],
+                "levene_p": res["levene_p"],
+                "type_test":res["type_test"],
+                "t_stat": res["t_stat"],
+                "p_value": res["p_value"],
+                "reject_H0": res["reject_H0"],
+                "conclusion": "Diferentes" if res["reject_H0"] else "No diferentes"
+            })
+        
+        return pd.DataFrame(results)
+                
 def preprocesamiento(src_poblacion_completa,src_A,src_B,src_C,src_politica):
     """
     Primera etapa 
@@ -312,5 +358,8 @@ def main():
     a2=analysis_2(a1.dataframes)
     df_ttest_sample=a2.complete_table(list_files=["A","B","C"],mu=df_statistics_complete_population["mean"])
     print(df_ttest_sample)
-    
+    #tercer punto
+    a3=analysis_3(a1.dataframes)
+    df_ttest_independent=a3.create_table()
+    print(df_ttest_independent)
 main()
