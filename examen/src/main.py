@@ -416,6 +416,162 @@ class analysis_5:
             "anova":anova,
             "residual_normality":residual_normality
         }
+
+  ##########################
+
+#   Etapa 6             #
+#   Prueba              #
+#   ANOVA de un factor  #
+
+############################
+import scikit_posthocs as sp
+class analysis_6:
+    def __init__(self,dataframe_complete:dict[str,pd.DataFrame]) :
+        self.data=dataframe_complete
+    def kruskal_wallis(self,column="pm25"):
+        groups=["A","B","C"]
+        data_groups=[self.data[sample][column].dropna() for sample in groups]
+        stat,p=stats.kruskal(*data_groups)
+        return pd.DataFrame([
+            {
+                "h_stat":float(stat),
+                "p_value":float(p),
+                "reject_H0":bool(p<0.05)
+            }
+        ])
+    def dunn_posthocs(self,column="pm25",p_adjust="bonferroni"):
+        data=[]
+        group=["A","B","C"]
+        for k in group:
+            temp=pd.DataFrame({
+                "value":self.data[k][column].dropna(),
+                "group":k
+            })
+            data.append(temp)
+        full_df=pd.concat(data)
+        posthoc=sp.posthoc_dunn(
+            full_df,val_col="value",
+            group_col="group",
+            p_adjust=p_adjust
+        )
+        return posthoc 
+    def full_analysis(self,column="pm25"):
+        kruskal=self.kruskal_wallis(column)
+        dunn=self.dunn_posthocs(column)
+        return {
+            "kruskal":kruskal,
+            "dunn":dunn
+        }
+ 
+class analysis_7:
+    def __init__(self,dataframe_complete:dict[str,pd.DataFrame],groups:list[str]=["A","B","C"],column:str="pm25"):
+        self.list_groups=groups
+        self.data=dataframe_complete
+        self.column=column
+    def create_contigency_table(self):
+        table={}
+        for g in self.list_groups:
+            df=self.data[g]
+            classification=df[self.column].apply(
+                lambda x: "si" if x>=50 else "no"
+            )
+            counts=classification.value_counts()
+            table[g]={
+                "si":int(counts.get("si",0)),
+                "no":int(counts.get("no",0))
+            }
+        return pd.DataFrame.from_dict(table,orient="index")
+            
+    def chi_square_test(self):
+        table=self.create_contigency_table()
+        chi2,p,dof,expected=stats.chi2_contingency(table)
+        expected_df = pd.DataFrame(
+           expected,
+            index=table.index,
+            columns=table.columns
+        )
+        result={
+            "chi2": float(chi2),
+            "p_value":float(p),
+            "dof":int(dof),
+            "reject_H0":bool(p<0.05),
+        }
+        return{
+            "frequency":expected_df,
+            "contingency":table,
+            "result":pd.DataFrame([result]) 
+        }
+
+class analysis_8:
+    def __init__(self,dataframe_complete:dict[str,pd.DataFrame],groups:list[str]=["poblacion_completa","A","B","C"],column:str="pm25"):
+        self.list_groups=groups
+        self.data=dataframe_complete
+        self.column=column
+    def dashboard(self,out="plot"):
+        groups=self.list_groups
+        fig=plt.figure(figsize=(16,12))
+        #boxplot
+        ax1=plt.subplot(2,2,1)
+        data_box=[self.data[g][self.column].dropna() for g in groups]
+        labels=groups
+        ax1.boxplot(data_box,tick_labels=labels)
+        ax1.set_title("Boxplots comparativos")
+        # q-q plots
+        ax2=plt.subplot(2,2,2)
+        for g in groups:
+            if "poblacion_completa" in g:
+                continue
+            stats.probplot(self.data[g][self.column].dropna(),dist="norm",plot=ax2)
+        ax2.set_title("Q-Q plots (todas las muestras")
+        #histograma densidad
+        ax3=plt.subplot(2,2,3)
+        colors = [
+            "#1f77b4",  # azul fuerte
+            "#2ca02c",  # verde
+            "#d62728",  # café
+            "#bcbd22",  # amarillo oscuro
+            "#7f7f7f",  # gris
+            "#17becf"   # cyan
+        ] 
+        population=self.data["poblacion_completa"][self.column].dropna()
+        ax3.hist(population,bins=30,density=True, alpha=0.4,label="Poblacion",color=colors[0])
+        i=1
+        for g in groups:
+            if "poblacion_completa" in g:
+                continue
+            ax3.hist(self.data[g][self.column].dropna(),bins=30,density=True,alpha=0.4,label=f"Muestra {g}",color=colors[i%len(colors)])
+            i+=1
+        ax3.set_title("Distribucion de densidad")
+        ax3.legend()
+
+        #Medias + IC 95
+        ax4 = plt.subplot(2,2,4)
+        means = []
+        ci_lower = []
+        ci_upper = []
+        plot_groups = [g for g in groups if g != "poblacion_completa"]
+        for g in plot_groups:
+
+            data = self.data[g][self.column].dropna()
+            mean = np.mean(data)
+            sem = stats.sem(data)
+            ci = stats.t.interval(0.95, len(data)-1, loc=mean, scale=sem)
+            means.append(mean)
+            ci_lower.append(mean - ci[0])
+            ci_upper.append(ci[1] - mean)
+
+        ax4.errorbar(plot_groups, means, yerr=[ci_lower, ci_upper], fmt='o', capsize=5)
+        ax4.set_title("Medias con IC 95%")        
+
+        create_folder(out)
+        file_name=f"dashborad_{self.column}.png"
+        full_path=os.path.join(out,file_name)
+        plt.savefig(full_path,dpi=300)
+        plt.tight_layout()
+        plt.show()
+
+        
+
 def preprocesamiento(src_poblacion_completa,src_A,src_B,src_C,src_politica):
     """
     Primera etapa 
@@ -466,4 +622,17 @@ def main():
     for titulo, df in dictionary_results.items():
         print(f"****{titulo}****")
         print(df)
+    a6=analysis_6(a1.dataframes)
+    dictionary_results_a6=a6.full_analysis()
+    for titulo, df in dictionary_results_a6.items():
+        print(f"****{titulo}****")
+        print(df)
+    #Fase 7
+    a7=analysis_7(a1.dataframes)
+    dictionary_results_a7=a7.chi_square_test()
+    for titulo, df in dictionary_results_a7.items():
+        print(f"****{titulo}****")
+        print(df)
+    a8=analysis_8(a1.dataframes)
+    a8.dashboard()
 main()
