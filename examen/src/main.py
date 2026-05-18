@@ -462,7 +462,14 @@ class analysis_6:
             "kruskal":kruskal,
             "dunn":dunn
         }
- 
+   ##########################
+
+#   Etapa 7             #
+#   Prueba              #
+#   chi cuadrada        #
+
+############################
+
 class analysis_7:
     def __init__(self,dataframe_complete:dict[str,pd.DataFrame],groups:list[str]=["A","B","C"],column:str="pm25"):
         self.list_groups=groups
@@ -501,6 +508,12 @@ class analysis_7:
             "contingency":table,
             "result":pd.DataFrame([result]) 
         }
+####################
+
+#   Etapa 8        #
+#   dashboard      #
+
+####################
 
 class analysis_8:
     def __init__(self,dataframe_complete:dict[str,pd.DataFrame],groups:list[str]=["poblacion_completa","A","B","C"],column:str="pm25"):
@@ -570,8 +583,105 @@ class analysis_8:
         plt.tight_layout()
         plt.show()
 
-        
+####################
 
+#     Etapa 9      #
+#     ranking      #
+
+####################
+
+
+class analysis_9:
+    def __init__(self,dataframe_complete:dict[str,pd.DataFrame],
+                 groups:list[str]=["A","B","C"],
+                 column:str="pm25"):
+
+        self.data=dataframe_complete
+        self.groups=groups 
+        self.column=column
+    def mean_error(self):
+        pop_mean=self.data["poblacion_completa"][self.column].mean()
+        return { g: abs(self.data[g][self.column].mean()-pop_mean) for g in self.groups}
+    def ks_test(self):
+        pop=self.data["poblacion_completa"][self.column].dropna()
+        scores={}
+        for g in self.groups:
+            stat,p=stats.ks_2samp(pop,self.data[g][self.column].dropna())
+            scores[g]=p
+        return scores
+    def chi_square(self):
+        scores={}
+        for g in self.groups:
+            data=self.data[g][self.column]
+            cat=data.apply(lambda x:"si" if x>=50 else "no")
+            obs=cat.value_counts()
+
+            pop=self.data["poblacion_completa"][self.column]
+            pop_cat=pop.apply(lambda x:"si" if x>=50 else "no")
+            exp=pop_cat.value_counts(normalize=True)
+            expected=exp*len(cat)
+            chi2,p=stats.chisquare(f_obs=obs,f_exp=expected)
+            scores[g]=p
+        return scores
+    def compute_ranking(self):
+        mean_err=self.mean_error()
+        ks=self.ks_test()
+        chi=self.chi_square()
+        results=[]
+        for g in self.groups:
+            mean_score=-mean_err[g]
+            ks_score=ks[g]
+            chi_score=chi[g]
+            final_score=mean_score+ks_score+chi_score
+            results.append({
+                "strategy":g,
+                "mean_error":mean_err[g],
+                "ks_pvalue":ks[g],
+                "chi_pvalue":chi[g],
+                "final_score":final_score
+            })
+        df=pd.DataFrame(results)
+        df["rank"]=df["final_score"].rank(ascending=False,method="dense")
+        return df.sort_values("rank")
+
+  ##########################
+
+#   Etapa 10             #
+#   Prueba              #
+#   ANOVA de un factor  #
+
+############################
+def auditar_muestreo(data_frame:pd.DataFrame,estrategias_dict:dict[str,pd.DataFrame],columna_medicion:str="pm25",limite_saludable:int=50):
+    data={"poblacion_completa":data_frame}
+    data.update(estrategias_dict)
+    #prueba t
+    prueba_t=analysis_2(data)
+    media_poblacional=data_frame[columna_medicion].mean()
+    df_t=prueba_t.complete_table(list_files=["A","B","C"],mu=media_poblacional)
+    mean_muestreal = df_t["mean"].to_dict()
+    pvalue_t = df_t["p_value"].to_dict()
+    # prueb chi 
+    pruebas_restantes=analysis_9(data)
+    chi=pruebas_restantes.chi_square()
+    ks=pruebas_restantes.ks_test()
+    results=[]
+    for g in pruebas_restantes.groups:
+        decision="Buena representacion"
+        score = (int(pvalue_t[g] > 0.05) +int(ks[g] > 0.05) +int(chi[g] > 0.05))
+        if (pvalue_t[g]<0.05)or (ks[g]<0.05) or (chi[g]<0.05):
+            decision="Posible sesgo"
+        results.append({
+            "estrategia":g,
+            "media_muestreal":mean_muestreal[g],
+            "media_poblacional":media_poblacional,
+            "p_value_t":pvalue_t[g],
+            "p_value_ks":ks[g],
+            "p_value_chi":chi[g],
+            "recomendacion":decision ,
+            "score":score
+        })
+    df_final =pd.DataFrame(results)
+    return df_final
 def preprocesamiento(src_poblacion_completa,src_A,src_B,src_C,src_politica):
     """
     Primera etapa 
@@ -597,42 +707,71 @@ def main():
     src_B="processed/B.csv"
     src_C="processed/C.csv"
     src_politica="processed/politica.csv"
+    diccionario_dataframes={}
 #    preprocesamiento(src_poblacion_completa,src_A,src_B,src_C,src_politica)
     #Primer punto 
     a1=analysis_1("processed")
     df_statistics_complete_population=a1.calculate_statistics("poblacion_completa")
+    diccionario_dataframes["a1"]=df_statistics_complete_population
     print(df_statistics_complete_population)
     a1.visualize_distributions("poblacion_completa",title="Poblacion Completa")
     stats,p=a1.normality_shapiro("poblacion_completa")
+
     #segundo punto 
     a2=analysis_2(a1.dataframes)
     df_ttest_sample=a2.complete_table(list_files=["A","B","C"],mu=df_statistics_complete_population["mean"])
     print(df_ttest_sample)
+    diccionario_dataframes["ttest_sample"]=df_ttest_sample
+
     #tercer punto
     a3=analysis_3(a1.dataframes)
     df_ttest_independent=a3.create_table()
+    diccionario_dataframes["ttest_independent"]=df_ttest_independent
     print(df_ttest_independent)
     #cuarto punto
     a4=analysis_4(a1.dataframes)
     df_wt_test=a4.prueba_comparativa()
+    diccionario_dataframes["wilcoxon_pol"]=df_wt_test
     print(df_wt_test)
     #quinto punto
     a5=analysis_5(a1.dataframes)
     dictionary_results=a5.full_analysis()
     for titulo, df in dictionary_results.items():
+        diccionario_dataframes[titulo]=df
         print(f"****{titulo}****")
         print(df)
     a6=analysis_6(a1.dataframes)
     dictionary_results_a6=a6.full_analysis()
     for titulo, df in dictionary_results_a6.items():
+        diccionario_dataframes[titulo]=df
         print(f"****{titulo}****")
         print(df)
     #Fase 7
     a7=analysis_7(a1.dataframes)
     dictionary_results_a7=a7.chi_square_test()
     for titulo, df in dictionary_results_a7.items():
+        diccionario_dataframes[titulo]=df
         print(f"****{titulo}****")
         print(df)
+    #fase 8 
     a8=analysis_8(a1.dataframes)
     a8.dashboard()
+    #fase 9
+    a9=analysis_9(a1.dataframes)
+    df_ranking=a9.compute_ranking()
+    
+    diccionario_dataframes["ranking"]=df_ranking
+    print(df_ranking)
+    df_final=auditar_muestreo(a1.dataframes["poblacion_completa"],{k:v for k,v in a1.dataframes.items() if k in ["A","B","C"]},
+                              columna_medicion="pm25",limite_saludable=50)
+    print(df_final)
+    diccionario_dataframes["auditar"]=df_final 
+    ###Final
+    ##Crear las tablas
+    save_tables(diccionario_dataframes)
+def save_tables(dict_dfs,folder="tables"):
+    create_folder(folder)
+    for name,df in dict_dfs.items():
+        with open(f"{folder}/{name}.tex","w") as f:
+            f.write(df.to_latex()) 
 main()
