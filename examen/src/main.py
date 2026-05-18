@@ -322,6 +322,30 @@ class analysis_3:
         
         return pd.DataFrame(results)
                 
+  ##########################
+
+#   Etapa 4                #
+#   Prueba                 #
+#   wilcoxon para          #
+#   politica ambiental     #
+
+############################
+class analysis_4:
+    def __init__(self,dataframe_complete:dict[str,pd.DataFrame]):
+        self.data=dataframe_complete["politica"]
+    def prueba_comparativa(self):
+        diff=self.data["pm25_despues"]-self.data["pm25_antes"]
+        stat,pvalue=stats.wilcoxon(diff)
+        t_stat,p_t=stats.ttest_rel(self.data["pm25_despues"],self.data["pm25_antes"])
+        return pd.DataFrame([
+            {
+                "w_stat":stat,
+                "w_p":pvalue,
+                "t_stat":t_stat,
+                "t_p":p_t
+            }
+        ])
+        
 def preprocesamiento(src_poblacion_completa,src_A,src_B,src_C,src_politica):
     """
     Primera etapa 
@@ -362,4 +386,8 @@ def main():
     a3=analysis_3(a1.dataframes)
     df_ttest_independent=a3.create_table()
     print(df_ttest_independent)
+    #cuarto punto
+    a4=analysis_4(a1.dataframes)
+    df_wt_test=a4.prueba_comparativa()
+    print(df_wt_test)
 main()
