@@ -333,7 +333,7 @@ class analysis_3:
 class analysis_4:
     def __init__(self,dataframe_complete:dict[str,pd.DataFrame]):
         self.data=dataframe_complete["politica"]
-    def prueba_comparativa(self):
+    def prueba_comparativa(self)->pd.DataFrame:
         diff=self.data["pm25_despues"]-self.data["pm25_antes"]
         stat,pvalue=stats.wilcoxon(diff)
         t_stat,p_t=stats.ttest_rel(self.data["pm25_despues"],self.data["pm25_antes"])
@@ -345,7 +345,77 @@ class analysis_4:
                 "t_p":p_t
             }
         ])
-        
+                        
+  ##########################
+
+#   Etapa 5             #
+#   Prueba              #
+#   ANOVA de un factor  #
+
+############################
+class analysis_5:
+    def __init__(self,dataframe_complete:dict[str,pd.DataFrame]) :
+        self.data=dataframe_complete
+    def check_homogeneity(self,column="pm25"):
+        groups=["A","B","C"]
+        data_groups=[self.data[sample][column].dropna() for sample in groups]
+        stat,p=stats.levene(*data_groups)
+        return pd.DataFrame([{
+            "levene_stat":float(stat),
+            "levene_p":float(p),
+            "equal_variance":bool(p>=0.05)
+        }])
+    def check_normality(self,column="pm25"):
+        groups=["A","B","C"]
+        results={}
+        for k in groups:
+            stat,p=stats.shapiro(self.data[k][column].dropna())
+            results[k]={
+                "shapiro_stat":float(stat),
+                "shapiro_p":float(p),
+                "normal":bool(p>=0.05)
+            }
+        return pd.DataFrame.from_dict(results,orient="index")
+
+    def anova_one_way(self,column="pm25"):
+        groups=["A","B","C"]
+        data_groups=[self.data[sample][column].dropna() for sample in groups]
+        stat,p=stats.f_oneway(*data_groups)
+        return pd.DataFrame([{
+            "f_stat":float(stat),
+            "f_p":float(p),
+            "reject_HO":bool(p<0.05)
+        }])
+    def get_residuals(self,column="pm25"):
+        groups=["A","B","C"]
+        residuals={}
+        for k in groups:
+            values=self.data[k][column].dropna()
+            mean=values.mean()
+            residuals[k]=values-mean
+        return residuals
+    def check_residual_normality(self,column="pm25"):
+        residuals=self.get_residuals(column)
+        results={}
+        for k,res in residuals.items():
+            stat,p=stats.shapiro(res)
+            results[k]={
+                "shapiro_stat":float(stat),
+                "shapiro_p":float(p),
+                "normal":bool(p>=0.05)
+            }
+        return pd.DataFrame.from_dict(results,orient="index")
+    def full_analysis(self,column="pm25"):
+        normality=self.check_normality(column)
+        homogenity=self.check_homogeneity(column)
+        anova=self.anova_one_way(column)
+        residual_normality=self.check_residual_normality(column)
+        return {
+            "normality":normality,
+            "homogenity":homogenity,
+            "anova":anova,
+            "residual_normality":residual_normality
+        }
 def preprocesamiento(src_poblacion_completa,src_A,src_B,src_C,src_politica):
     """
     Primera etapa 
@@ -390,4 +460,10 @@ def main():
     a4=analysis_4(a1.dataframes)
     df_wt_test=a4.prueba_comparativa()
     print(df_wt_test)
+    #quinto punto
+    a5=analysis_5(a1.dataframes)
+    dictionary_results=a5.full_analysis()
+    for titulo, df in dictionary_results.items():
+        print(f"****{titulo}****")
+        print(df)
 main()
